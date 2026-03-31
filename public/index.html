@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Text Upload</title>
+    <style>
+      body { font-family: Arial, sans-serif; max-width: 800px; margin: 24px auto; padding: 0 16px; }
+      h1 { margin-bottom: 0.5rem; }
+      textarea { width: 100%; min-height: 200px; padding: 12px; font-size: 16px; line-height: 1.4; }
+      button { margin-top: 12px; padding: 10px 18px; font-size: 16px; cursor: pointer; }
+      .note { color: #555; margin-top: 12px; }
+      a { color: #0066cc; }
+    </style>
+  </head>
+  <body>
+    <h1>Upload text</h1>
+    <form method="POST" action="/upload">
+      <label for="senderUsername">Your username (optional):</label>
+      <input id="senderUsername" name="senderUsername" type="text" placeholder="Enter your username" style="width:100%; padding:10px; margin-bottom:12px; font-size:16px;" />
+      <label for="text">Enter your text below:</label>
+      <textarea id="text" name="text" placeholder="Type or paste your text here..."></textarea>
+      <button type="submit">Send text</button>
+    </form>
+    <p class="note"><a href="/submissions">View all received submissions</a></p>
+  </body>
+</html>
