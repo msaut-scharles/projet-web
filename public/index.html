@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
+    <div id="username-banner" class="username-banner" aria-live="polite"></div>
     <main class="page-shell">
       <div class="card">
         <div class="brand">
@@ -18,10 +19,7 @@
         </div>
 
         <form method="POST" action="/upload" class="form-grid">
-          <div class="form-group">
-            <label for="senderUsername">Your username (optional)</label>
-            <input id="senderUsername" name="senderUsername" type="text" placeholder="Enter your username" autocomplete="username" />
-          </div>
+          <div id="username-section">{{usernameSection}}</div>
 
           <div class="form-group">
             <label for="text">Enter your text below</label>
@@ -37,5 +35,24 @@
         </div>
       </div>
     </main>
+
+    <script>
+      function readCookie(name) {
+        const match = document.cookie.match('(^|;)\\s*' + name + '=([^;]+)');
+        return match ? decodeURIComponent(match[2]) : '';
+      }
+
+      const username = readCookie('username');
+      const banner = document.getElementById('username-banner');
+      const usernameInput = document.getElementById('senderUsername');
+
+      if (username) {
+        banner.textContent = 'Signed in as ' + username;
+      }
+
+      if (usernameInput && username) {
+        usernameInput.value = username;
+      }
+    </script>
   </body>
 </html>

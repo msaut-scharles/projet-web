@@ -12,7 +12,45 @@ const submissions = loadCsvSubmissions();
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+
+function parseCookies(cookieHeader) {
+  return (cookieHeader || '')
+    .split(';')
+    .map((cookiePair) => cookiePair.trim())
+    .filter(Boolean)
+    .reduce((cookies, cookiePair) => {
+      const separatorIndex = cookiePair.indexOf('=');
+      if (separatorIndex === -1) return cookies;
+      const name = cookiePair.slice(0, separatorIndex).trim();
+      const value = cookiePair.slice(separatorIndex + 1).trim();
+      cookies[name] = decodeURIComponent(value);
+      return cookies;
+    }, {});
+}
+
+app.use((req, res, next) => {
+  req.cookies = parseCookies(req.headers.cookie || '');
+  next();
+});
+
+function getCookieValue(req, name) {
+  const cookieHeader = req.headers.cookie || '';
+  return cookieHeader
+    .split(';')
+    .map((cookiePair) => cookiePair.trim())
+    .reduce((acc, cookiePair) => {
+      const separatorIndex = cookiePair.indexOf('=');
+      if (separatorIndex === -1) return acc;
+      const key = cookiePair.slice(0, separatorIndex).trim();
+      const value = cookiePair.slice(separatorIndex + 1).trim();
+      acc[key] = decodeURIComponent(value);
+      return acc;
+    }, {})[name] || '';
+}
+
+function getUsernameFromRequest(req) {
+  return (req.cookies.username || '').trim();
+}
 
 app.post('/upload', (req, res) => {
   const textContent = (req.body.text || '').trim();
@@ -20,7 +58,8 @@ app.post('/upload', (req, res) => {
     return res.status(400).send(
       renderPageFromTemplate(
         'Upload error',
-        'upload-error.html'
+        'upload-error.html',
+        getUsernameFromRequest(req)
       )
     );
   }
@@ -31,6 +70,11 @@ app.post('/upload', (req, res) => {
   const senderUsername = (req.body.senderUsername || '').trim();
   const sourcePage = (req.body.source || '').trim();
   const isChatSource = sourcePage === 'chat';
+  const usernameForRender = senderUsername || getUsernameFromRequest(req);
+
+  if (usernameForRender) {
+    res.setHeader('Set-Cookie', `username=${encodeURIComponent(usernameForRender)}; Path=/; SameSite=Lax; Max-Age=31536000`);
+  }
 
   const submission = { textContent, receivedTime, receivedDate, senderUsername };
   submissions.push(submission);
@@ -42,7 +86,8 @@ app.post('/upload', (req, res) => {
     return res.status(500).send(
       renderPageFromTemplate(
         'Server error',
-        'server-error.html'
+        'server-error.html',
+        getUsernameFromRequest(req)
       )
     );
   }
@@ -50,7 +95,7 @@ app.post('/upload', (req, res) => {
   const extraChatLink = isChatSource ? '<a class="button-link" href="/chat">Back to chat</a>' : '';
   const contentTemplate = loadTemplate('submission-received.html');
   const content = contentTemplate.replace('{{extraChatLink}}', extraChatLink);
-  res.send(renderPage('Submission received', content));
+  res.send(renderPage('Submission received', content, usernameForRender));
 });
 
 app.get('/chat', (req, res) => {
@@ -72,7 +117,7 @@ app.get('/chat', (req, res) => {
 
   const contentTemplate = loadTemplate('chat.html');
   const content = contentTemplate.replace('{{chatItems}}', chatItems);
-  res.send(renderPage('Chat interface', content));
+  res.send(renderPage('Chat interface', content, getUsernameFromRequest(req)));
 });
 
 app.get('/submissions', (req, res) => {
@@ -86,12 +131,45 @@ app.get('/submissions', (req, res) => {
 
   const contentTemplate = loadTemplate('submissions.html');
   const content = contentTemplate.replace('{{rows}}', rows || loadTemplate('no-submissions.html'));
-  res.send(renderPage('Received submissions', content));
+  res.send(renderPage('Received submissions', content, getUsernameFromRequest(req)));
 });
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+app.get('/skip', (req, res) => {
+  const username = 'anonymous';
+  res.setHeader('Set-Cookie', `username=${encodeURIComponent(username)}; Path=/; SameSite=Lax; Max-Age=31536000`);
+  res.redirect('/');
 });
+
+app.get(['/', '/index.html'], (req, res) => {
+  res.send(renderIndexPage(getUsernameFromRequest(req)));
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+function renderIndexPage(username) {
+  const indexFilePath = path.join(__dirname, 'public', 'index.html');
+  let html = fs.readFileSync(indexFilePath, 'utf8');
+  const bannerHtml = username
+    ? `<div id="username-banner" class="username-banner" aria-live="polite">Signed in as ${escapeHtml(username)}</div>`
+    : '<div id="username-banner" class="username-banner" aria-live="polite"></div>';
+
+  const usernameSection = username
+    ? ''
+    : `<div class="form-group">
+          <label for="senderUsername">Your username (optional)</label>
+          <input id="senderUsername" name="senderUsername" type="text" placeholder="Enter your username" autocomplete="username" />
+        </div>
+        <div class="skip-container">
+          <a class="button-link" href="/skip">Skip and continue as anonymous</a>
+        </div>`;
+
+  html = html.replace(
+    '<div id="username-banner" class="username-banner" aria-live="polite"></div>',
+    bannerHtml
+  );
+
+  return html.replace('{{usernameSection}}', usernameSection);
+}
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
@@ -307,14 +385,19 @@ function loadTemplate(filename) {
   }
 }
 
-function renderPage(title, content) {
+function renderPage(title, content, username = '') {
   const layout = loadTemplate('layout.html');
+  const usernameDisplay = username
+    ? `<div class="username-banner">Signed in as ${escapeHtml(username)}</div>`
+    : '';
+
   return layout
     .replace('{{title}}', escapeHtml(title))
+    .replace('{{usernameDisplay}}', usernameDisplay)
     .replace('{{content}}', content);
 }
 
-function renderPageFromTemplate(title, templateName) {
+function renderPageFromTemplate(title, templateName, username = '') {
   const content = loadTemplate(templateName);
-  return renderPage(title, content);
+  return renderPage(title, content, username);
 }
