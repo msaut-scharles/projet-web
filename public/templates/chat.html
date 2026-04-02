@@ -6,16 +6,23 @@
       <p class="meta">A chat-style view for submitting text and seeing recent entries as messages.</p>
     </div>
   </div>
+  {{channelControls}}
 
   <div class="chat-window">{{chatItems}}</div>
   {{formNotice}}
 
-  <form class="chat-form" method="POST" action="/upload">
+  <form class="chat-form" method="POST" action="/upload" enctype="multipart/form-data">
     <input type="hidden" name="source" value="chat" />
+    <input type="hidden" name="channel" value="{{currentChannel}}" />
     {{usernameInput}}
     <div class="form-row">
       <label for="text">Message</label>
-      <textarea id="text" name="text" placeholder="Type your message here..." required></textarea>
+      <textarea id="text" name="text" placeholder="Type your message here..."></textarea>
+    </div>
+    <div class="form-row file-picker">
+      <input id="media" name="media" type="file" accept="image/*,video/*" />
+      <label class="file-picker__button" for="media">Choose file</label>
+      <span class="file-picker__name">No file selected</span>
     </div>
     <div class="chat-actions">
       <button type="submit">Send message</button>
@@ -44,6 +51,16 @@
           message.classList.add('show-delete');
         });
       });
+
+      const fileInput = document.getElementById('media');
+      const fileNameDisplay = document.querySelector('.file-picker__name');
+      if (fileInput && fileNameDisplay) {
+        fileInput.addEventListener('change', () => {
+          fileNameDisplay.textContent = fileInput.files.length
+            ? fileInput.files[0].name
+            : 'No file selected';
+        });
+      }
     });
   </script>
 </div>
