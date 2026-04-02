@@ -54,23 +54,20 @@ function getUsernameFromRequest(req) {
 
 app.post('/upload', (req, res) => {
   const textContent = (req.body.text || '').trim();
+  const senderUsername = (req.body.senderUsername || '').trim();
+  const usernameForRender = senderUsername || getUsernameFromRequest(req);
+
   if (!textContent) {
-    return res.status(400).send(
-      renderPageFromTemplate(
-        'Upload error',
-        'upload-error.html',
-        getUsernameFromRequest(req)
-      )
-    );
+    const contentTemplate = loadTemplate('chat.html');
+    const content = contentTemplate
+      .replace('{{chatItems}}', buildChatItems())
+      .replace('{{formNotice}}', '<div class="notice">Text cannot be empty.</div>');
+    return res.status(400).send(renderPage('Chat interface', content, usernameForRender));
   }
 
   const now = new Date();
   const receivedDate = now.toISOString().slice(0, 10);
   const receivedTime = now.toISOString().slice(11, 19);
-  const senderUsername = (req.body.senderUsername || '').trim();
-  const sourcePage = (req.body.source || '').trim();
-  const isChatSource = sourcePage === 'chat';
-  const usernameForRender = senderUsername || getUsernameFromRequest(req);
 
   if (usernameForRender) {
     res.setHeader('Set-Cookie', `username=${encodeURIComponent(usernameForRender)}; Path=/; SameSite=Lax; Max-Age=31536000`);
@@ -92,20 +89,19 @@ app.post('/upload', (req, res) => {
     );
   }
 
-  const extraChatLink = isChatSource ? '<a class="button-link" href="/chat">Back to chat</a>' : '';
-  const contentTemplate = loadTemplate('submission-received.html');
-  const content = contentTemplate.replace('{{extraChatLink}}', extraChatLink);
-  res.send(renderPage('Submission received', content, usernameForRender));
+  res.redirect('/chat');
 });
 
-app.get('/chat', (req, res) => {
+function buildChatItems(currentUsername = '') {
   const recentSubmissions = loadCsvSubmissions().slice(-8);
-  const chatItems = recentSubmissions.length
+  const normalizedCurrent = currentUsername.trim();
+  return recentSubmissions.length
     ? recentSubmissions
-        .map((item, index) => {
+        .map((item) => {
           const sender = item.senderUsername ? escapeHtml(item.senderUsername) : 'Anonymous';
           const message = escapeHtml(item.textContent);
-          const bubbleClass = index % 2 === 0 ? 'chat-message--sender' : 'chat-message--user';
+          const isOwnMessage = normalizedCurrent && sender === normalizedCurrent;
+          const bubbleClass = isOwnMessage ? 'chat-message--user' : 'chat-message--other';
           return `
             <div class="chat-message ${bubbleClass}">
               <div class="chat-message__body">${message}</div>
@@ -114,10 +110,23 @@ app.get('/chat', (req, res) => {
         })
         .join('')
     : loadTemplate('chat-empty.html');
+}
+
+app.get('/chat', (req, res) => {
+  const currentUsername = getUsernameFromRequest(req);
+  const usernameInput = currentUsername
+    ? ''
+    : `<div class="form-row">
+         <label for="senderUsername">Username</label>
+         <input id="senderUsername" name="senderUsername" type="text" placeholder="Your username (optional)" autocomplete="username" />
+       </div>`;
 
   const contentTemplate = loadTemplate('chat.html');
-  const content = contentTemplate.replace('{{chatItems}}', chatItems);
-  res.send(renderPage('Chat interface', content, getUsernameFromRequest(req)));
+  const content = contentTemplate
+    .replace('{{chatItems}}', buildChatItems(currentUsername))
+    .replace('{{formNotice}}', '')
+    .replace('{{usernameInput}}', usernameInput);
+  res.send(renderPage('Chat interface', content, currentUsername));
 });
 
 app.get('/submissions', (req, res) => {
@@ -140,8 +149,13 @@ app.get('/skip', (req, res) => {
   res.redirect('/');
 });
 
+app.get('/signout', (req, res) => {
+  res.setHeader('Set-Cookie', 'username=; Path=/; SameSite=Lax; Max-Age=0');
+  res.redirect('/chat');
+});
+
 app.get(['/', '/index.html'], (req, res) => {
-  res.send(renderIndexPage(getUsernameFromRequest(req)));
+  res.redirect('/chat');
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -388,7 +402,7 @@ function loadTemplate(filename) {
 function renderPage(title, content, username = '') {
   const layout = loadTemplate('layout.html');
   const usernameDisplay = username
-    ? `<div class="username-banner">Signed in as ${escapeHtml(username)}</div>`
+    ? `<a class="username-banner" href="/signout" title="Click to sign out">Signed in as ${escapeHtml(username)}</a>`
     : '';
 
   return layout

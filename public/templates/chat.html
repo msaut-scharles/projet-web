@@ -8,13 +8,11 @@
   </div>
 
   <div class="chat-window">{{chatItems}}</div>
+  {{formNotice}}
 
   <form class="chat-form" method="POST" action="/upload">
     <input type="hidden" name="source" value="chat" />
-    <div class="form-row">
-      <label for="senderUsername">Username</label>
-      <input id="senderUsername" name="senderUsername" type="text" placeholder="Your username (optional)" autocomplete="username" />
-    </div>
+    {{usernameInput}}
     <div class="form-row">
       <label for="text">Message</label>
       <textarea id="text" name="text" placeholder="Type your message here..." required></textarea>
@@ -24,8 +22,4 @@
     </div>
   </form>
 
-  <div class="footer-links">
-    <a class="button-link" href="/">Back to upload page</a>
-    <a class="button-link" href="/submissions">View submissions</a>
-  </div>
 </div>
