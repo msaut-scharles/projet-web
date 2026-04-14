@@ -1,0 +1,262 @@
+HTML Bits and Bobs for Backend Functionality
+
+This file contains all the HTML templates and snippets that were previously in separate .html files. They have been inlined into server.js to eliminate frontend files while preserving backend functionality.
+
+1. Layout Template (from public/templates/layout.html)
+   Used in: renderPage function in server.js
+   Purpose: Provides the basic HTML structure for all pages
+   Content:
+   <!doctype html>
+   <html lang="en">
+     <head>
+       <meta charset="utf-8" />
+       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+       <title>{{title}}</title>
+       <link rel="stylesheet" href="/style.css" />
+     </head>
+     <body>
+       <main class="page-shell">
+         <header class="top-bar">
+           <nav class="top-bar__nav" aria-label="Primary navigation">
+             <a class="top-bar__link" href="/home">Home</a>
+             <a class="top-bar__link top-bar__link--active" href="/chat">Chat</a>
+             <a class="top-bar__link" href="/settings">Settings</a>
+           </nav>
+           <div class="top-bar__actions">
+             <input class="top-bar__input" type="text" placeholder="Random text..." aria-label="Random text input" />
+           </div>
+         </header>
+         <div class="page-content">{{content}}</div>
+       </main>
+     </body>
+   </html>
+
+2. Chat Index Template (from public/templates/chat/index.html)
+   Used in: /chat route and upload error handling in server.js
+   Purpose: Renders the chat interface with form and message display
+   Content:
+   <div class="card chat-card">
+     <div class="brand">
+       <span class="brand__mark">💬</span>
+       <div>
+         <h1>Chat interface</h1>
+         <p class="meta">A chat-style view for submitting text and seeing recent entries as messages.</p>
+       </div>
+     </div>
+
+     <div class="chat-window">{{chatItems}}</div>
+     {{formNotice}}
+
+     <form class="chat-form" method="POST" action="/upload" enctype="multipart/form-data">
+       <input type="hidden" name="source" value="chat" />
+       <div class="form-row">
+         <label for="text">Message</label>
+         <textarea id="text" name="text" placeholder="Type your message here..."></textarea>
+       </div>
+       <div class="form-row file-picker">
+         <input id="media" name="media" type="file" accept="image/*,video/*" />
+         <label class="file-picker__button" for="media">Choose file</label>
+         <span class="file-picker__name">No file selected</span>
+       </div>
+       <div class="chat-actions">
+         <button type="submit">Send message</button>
+       </div>
+     </form>
+
+     <script>
+       window.addEventListener('load', () => {
+         const chatWindow = document.querySelector('.chat-window');
+         if (chatWindow) {
+           chatWindow.scrollTop = chatWindow.scrollHeight;
+         }
+
+         document.addEventListener('click', () => {
+           document.querySelectorAll('.chat-message.show-delete').forEach((msg) => {
+             msg.classList.remove('show-delete');
+           });
+         });
+
+         document.querySelectorAll('.chat-message--user').forEach((message) => {
+           message.addEventListener('contextmenu', (event) => {
+             event.preventDefault();
+             document.querySelectorAll('.chat-message.show-delete').forEach((msg) => {
+               msg.classList.remove('show-delete');
+             });
+             message.classList.add('show-delete');
+           });
+         });
+
+         const fileInput = document.getElementById('media');
+         const fileNameDisplay = document.querySelector('.file-picker__name');
+         if (fileInput && fileNameDisplay) {
+           fileInput.addEventListener('change', () => {
+             fileNameDisplay.textContent = fileInput.files.length
+               ? fileInput.files[0].name
+               : 'No file selected';
+           });
+         }
+       });
+     </script>
+   </div>
+
+3. Chat Empty Template (from public/templates/chat/empty.html)
+   Used in: buildChatItems function in server.js when there are no messages
+   Purpose: Displays a message when the chat is empty
+   Content:
+   <div class="chat-empty">
+     <p>Your chat window is empty. Send a message to start the conversation.</p>
+   </div>
+
+4. Home Index Template (from public/templates/home/index.html)
+   Used in: /home route in server.js
+   Purpose: Content for the home page (was empty)
+   Content: (empty)
+
+5. Settings Index Template (from public/templates/settings/index.html)
+   Used in: /settings route in server.js
+   Purpose: Content for the settings page (was empty)
+   Content: (empty)
+
+6. Main Index HTML (from public/index.html)
+   Used in: renderIndexPage function in server.js (though this function seems unused in current routes)
+   Purpose: Original upload page
+   Content:
+   <!doctype html>
+   <html lang="en">
+     <head>
+       <meta charset="utf-8" />
+       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+       <title>Text Upload</title>
+       <link rel="stylesheet" href="/style.css" />
+     </head>
+     <body>
+       <header class="top-bar">
+         <nav class="top-bar__nav" aria-label="Primary navigation">
+           <a class="top-bar__link" href="#">Home</a>
+           <a class="top-bar__link top-bar__link--active" href="/chat">Chat</a>
+           <a class="top-bar__link" href="#">Settings</a>
+         </nav>
+         <div class="top-bar__actions">
+           <input class="top-bar__input" type="text" placeholder="Random text..." aria-label="Random text input" />
+         </div>
+       </header>
+       <main class="page-shell">
+         <div class="card">
+           <div class="brand">
+             <span class="brand__mark">✍️</span>
+             <div>
+               <h1>Upload your text</h1>
+               <p class="meta">Submit a message and review all received entries on the submissions page.</p>
+             </div>
+           </div>
+
+           <form method="POST" action="/upload" class="form-grid" enctype="multipart/form-data">
+             <div id="username-section"></div>
+
+             <div class="form-group">
+               <label for="text">Enter your text below</label>
+               <textarea id="text" name="text" placeholder="Type or paste your text here..."></textarea>
+             </div>
+
+             <div class="form-group file-picker">
+               <input id="media" name="media" type="file" accept="image/*,video/*" />
+               <label class="file-picker__button" for="media">Choose file</label>
+               <span class="file-picker__name">No file selected</span>
+             </div>
+
+             <button type="submit">Send text or media</button>
+           </form>
+
+           <div class="footer-links">
+             <a class="button-link" href="/submissions">View all submissions</a>
+             <a class="button-link" href="/chat">Open chat interface</a>
+           </div>
+         </div>
+       </main>
+
+       <script>
+         const fileInput = document.getElementById('media');
+         const fileNameDisplay = document.querySelector('.file-picker__name');
+         if (fileInput && fileNameDisplay) {
+           fileInput.addEventListener('change', () => {
+             fileNameDisplay.textContent = fileInput.files.length
+               ? fileInput.files[0].name
+               : 'No file selected';
+           });
+         }
+       </script>
+     </body>
+   </html>
+
+7. Inline HTML Snippets
+   Used in: Various places in server.js for error messages and submissions page
+   Purpose: Dynamic HTML generation for errors and data display
+
+   Error Content (in /upload POST route when no text/media):
+   <div class="card">
+     <div class="brand">
+       <span class="brand__mark">⚠️</span>
+       <div>
+         <h1>Server error</h1>
+         <p class="meta">Unable to save your submission right now.</p>
+       </div>
+     </div>
+   </div>
+
+   Submissions Page Content (in /submissions route):
+   <div class="card">
+     <div class="brand">
+       <span class="brand__mark">📥</span>
+       <div>
+         <h1>Received submissions</h1>
+         <p class="meta">Browse all saved text submissions from the form.</p>
+       </div>
+     </div>
+     <div class="table-wrapper">
+       <table>
+         <thead>
+           <tr>
+             <th>#</th>
+             <th>Text</th>
+             <th>Media</th>
+             <th>Date</th>
+             <th>Time</th>
+           </tr>
+         </thead>
+         <tbody>
+           ${rowsHtml}
+         </tbody>
+       </table>
+     </div>
+     <div class="footer-links">
+       <a class="button-link" href="/">Back to upload page</a>
+     </div>
+   </div>
+
+   Chat Message HTML (in buildChatItems function):
+   <div class="chat-message ${bubbleClass}">
+     ${bodyHtml}
+     ${mediaHtml}
+     <div class="chat-message__meta">${escapeHtml(item.receivedDate)} ${escapeHtml(item.receivedTime)}</div>
+     ${deleteButton}
+   </div>
+
+   Media Attachment HTML (in renderMediaAttachment function):
+   - Image: <div class="chat-message__media-container"><img class="chat-message__media" src="${src}" alt="Shared image" />${downloadButton}</div>
+   - Video: <div class="chat-message__media-container"><video class="chat-message__media" controls preload="metadata" src="${src}"></video>${downloadButton}</div>
+   - Other: <div class="chat-message__media-container"><a class="chat-message__media-link" href="${src}" target="_blank" rel="noopener noreferrer">Open attachment</a>${downloadButton}</div>
+
+   Download Button: <a class="chat-message__download" href="${src}" download="${filename}" title="Download attachment" aria-label="Download attachment">⬇</a>
+
+   Delete Button: <form class="chat-message__delete-form" method="POST" action="/delete-message">
+     <input type="hidden" name="messageIndex" value="${globalIndex}" />
+     <button type="submit" class="chat-message__delete-button">Delete</button>
+   </form>
+
+8. CSS Styles (from public/style.css)
+   Used in: All HTML pages via <link rel="stylesheet" href="/style.css" />
+   Purpose: Styling for the web interface
+   Note: Since we're removing frontend, this CSS is no longer served, but the styles are documented here for reference.
+   Content: [Full CSS content would be here, but omitted for brevity as it's not needed for backend functionality]
+
+All HTML files have been removed, and their content has been inlined into server.js functions. The server now generates HTML responses programmatically without relying on external template files.

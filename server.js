@@ -8,7 +8,102 @@ const app = express();
 const port = process.env.PORT || 3000;
 const historyCsvPath = path.join(__dirname, 'history.csv');
 const templatesPath = path.join(__dirname, 'public', 'templates');
-const uploadDir = path.join(__dirname, 'public', 'uploads');
+const uploadDir = path.join(__dirname, 'uploads');
+
+// Inline HTML templates (previously in separate files)
+const templates = {
+  'layout.html': `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{title}}</title>
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="top-bar">
+        <nav class="top-bar__nav" aria-label="Primary navigation">
+          <a class="top-bar__link" href="/home">Home</a>
+          <a class="top-bar__link top-bar__link--active" href="/chat">Chat</a>
+          <a class="top-bar__link" href="/settings">Settings</a>
+        </nav>
+        <div class="top-bar__actions">
+          <input class="top-bar__input" type="text" placeholder="Random text..." aria-label="Random text input" />
+        </div>
+      </header>
+      <div class="page-content">{{content}}</div>
+    </main>
+  </body>
+</html>`,
+  'chat/index.html': `<div class="card chat-card">
+  <div class="brand">
+    <span class="brand__mark">💬</span>
+    <div>
+      <h1>Chat interface</h1>
+      <p class="meta">A chat-style view for submitting text and seeing recent entries as messages.</p>
+    </div>
+  </div>
+
+  <div class="chat-window">{{chatItems}}</div>
+  {{formNotice}}
+
+  <form class="chat-form" method="POST" action="/upload" enctype="multipart/form-data">
+    <input type="hidden" name="source" value="chat" />
+    <div class="form-row">
+      <label for="text">Message</label>
+      <textarea id="text" name="text" placeholder="Type your message here..."></textarea>
+    </div>
+    <div class="form-row file-picker">
+      <input id="media" name="media" type="file" accept="image/*,video/*" />
+      <label class="file-picker__button" for="media">Choose file</label>
+      <span class="file-picker__name">No file selected</span>
+    </div>
+    <div class="chat-actions">
+      <button type="submit">Send message</button>
+    </div>
+  </form>
+
+  <script>
+    window.addEventListener('load', () => {
+      const chatWindow = document.querySelector('.chat-window');
+      if (chatWindow) {
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+      }
+
+      document.addEventListener('click', () => {
+        document.querySelectorAll('.chat-message.show-delete').forEach((msg) => {
+          msg.classList.remove('show-delete');
+        });
+      });
+
+      document.querySelectorAll('.chat-message--user').forEach((message) => {
+        message.addEventListener('contextmenu', (event) => {
+          event.preventDefault();
+          document.querySelectorAll('.chat-message.show-delete').forEach((msg) => {
+            msg.classList.remove('show-delete');
+          });
+          message.classList.add('show-delete');
+        });
+      });
+
+      const fileInput = document.getElementById('media');
+      const fileNameDisplay = document.querySelector('.file-picker__name');
+      if (fileInput && fileNameDisplay) {
+        fileInput.addEventListener('change', () => {
+          fileNameDisplay.textContent = fileInput.files.length
+            ? fileInput.files[0].name
+            : 'No file selected';
+        });
+      }
+    });
+  </script>
+</div>`,
+  'chat/empty.html': `<div class="chat-empty">
+  <p>Your chat window is empty. Send a message to start the conversation.</p>
+</div>`,
+  'home/index.html': '',
+  'settings/index.html': ''
+};
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
@@ -305,7 +400,7 @@ app.get(['/', '/index.html'], (req, res) => {
   res.redirect('/chat');
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(uploadDir));
 
 app.use((err, req, res, next) => {
   if (!err) {
@@ -323,21 +418,6 @@ app.use((err, req, res, next) => {
 
   res.status(400).send(renderPage('Upload error', content, currentUsername));
 });
-
-function renderIndexPage(username) {
-  const indexFilePath = path.join(__dirname, 'public', 'index.html');
-  let html = fs.readFileSync(indexFilePath, 'utf8');
-  const bannerHtml = '<div id="username-banner" class="username-banner" aria-live="polite"></div>';
-
-  const usernameSection = '';
-
-  html = html.replace(
-    '<div id="username-banner" class="username-banner" aria-live="polite"></div>',
-    bannerHtml
-  );
-
-  return html.replace('{{usernameSection}}', usernameSection);
-}
 
 const host = process.env.HOST || '0.0.0.0';
 app.listen(port, host, () => {
@@ -585,13 +665,7 @@ function escapeHtml(input) {
 }
 
 function loadTemplate(filename) {
-  const filePath = path.join(templatesPath, filename);
-  try {
-    return fs.readFileSync(filePath, 'utf8');
-  } catch (error) {
-    console.error(`Failed to load template ${filename}:`, error);
-    return '';
-  }
+  return templates[filename] || '';
 }
 
 function renderPage(title, content, username = '') {
