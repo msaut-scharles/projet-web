@@ -7,7 +7,16 @@
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    <div id="username-banner" class="username-banner" aria-live="polite"></div>
+    <header class="top-bar">
+      <nav class="top-bar__nav" aria-label="Primary navigation">
+        <a class="top-bar__link" href="#">Home</a>
+        <a class="top-bar__link top-bar__link--active" href="/chat">Chat</a>
+        <a class="top-bar__link" href="#">Settings</a>
+      </nav>
+      <div class="top-bar__actions">
+        <input class="top-bar__input" type="text" placeholder="Random text..." aria-label="Random text input" />
+      </div>
+    </header>
     <main class="page-shell">
       <div class="card">
         <div class="brand">
@@ -19,7 +28,7 @@
         </div>
 
         <form method="POST" action="/upload" class="form-grid" enctype="multipart/form-data">
-          <div id="username-section">{{usernameSection}}</div>
+          <div id="username-section"></div>
 
           <div class="form-group">
             <label for="text">Enter your text below</label>
@@ -43,23 +52,6 @@
     </main>
 
     <script>
-      function readCookie(name) {
-        const match = document.cookie.match('(^|;)\\s*' + name + '=([^;]+)');
-        return match ? decodeURIComponent(match[2]) : '';
-      }
-
-      const username = readCookie('username');
-      const banner = document.getElementById('username-banner');
-      const usernameInput = document.getElementById('senderUsername');
-
-      if (username) {
-        banner.textContent = 'Signed in as ' + username;
-      }
-
-      if (usernameInput && username) {
-        usernameInput.value = username;
-      }
-
       const fileInput = document.getElementById('media');
       const fileNameDisplay = document.querySelector('.file-picker__name');
       if (fileInput && fileNameDisplay) {

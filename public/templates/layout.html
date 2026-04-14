@@ -7,9 +7,18 @@
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    {{usernameDisplay}}
     <main class="page-shell">
-      {{content}}
+      <header class="top-bar">
+        <nav class="top-bar__nav" aria-label="Primary navigation">
+          <a class="top-bar__link" href="/home">Home</a>
+          <a class="top-bar__link top-bar__link--active" href="/chat">Chat</a>
+          <a class="top-bar__link" href="/settings">Settings</a>
+        </nav>
+        <div class="top-bar__actions">
+          <input class="top-bar__input" type="text" placeholder="Random text..." aria-label="Random text input" />
+        </div>
+      </header>
+      <div class="page-content">{{content}}</div>
     </main>
   </body>
 </html>

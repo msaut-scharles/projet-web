@@ -9,7 +9,6 @@ const port = process.env.PORT || 3000;
 const historyCsvPath = path.join(__dirname, 'history.csv');
 const templatesPath = path.join(__dirname, 'public', 'templates');
 const uploadDir = path.join(__dirname, 'public', 'uploads');
-const channelsPath = path.join(__dirname, 'channels.json');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
@@ -37,9 +36,7 @@ const upload = multer({
 
 ensureCsvFile();
 ensureUploadDir();
-ensureChannelsFile();
-let channels = loadChannels();
-const submissions = loadCsvSubmissions();
+let submissions = loadCsvSubmissions();
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
@@ -89,102 +86,9 @@ function ensureUploadDir() {
   }
 }
 
-function ensureChannelsFile() {
-  if (!fs.existsSync(channelsPath)) {
-    fs.writeFileSync(channelsPath, JSON.stringify(['general'], null, 2), 'utf8');
-  }
-}
-
-function loadChannels() {
-  try {
-    const content = fs.readFileSync(channelsPath, 'utf8');
-    const data = JSON.parse(content);
-    if (Array.isArray(data) && data.length > 0) {
-      return Array.from(new Set(data.map((name) => String(name).trim()).filter(Boolean)));
-    }
-  } catch (error) {
-    console.error('Failed to load channels:', error);
-  }
-  return ['general'];
-}
-
-function saveChannels(items) {
-  const normalized = Array.from(new Set(items.map((name) => String(name).trim()).filter(Boolean)));
-  fs.writeFileSync(channelsPath, JSON.stringify(normalized, null, 2), 'utf8');
-}
-
-function normalizeChannelName(value) {
-  return String(value || '')
-    .trim()
-    .replace(/[^a-zA-Z0-9 _-]/g, '')
-    .replace(/\s+/g, '-');
-}
-
-function renderChannelControls(currentChannel) {
-  const channelItems = channels
-    .map((channel) => {
-      const safeChannel = escapeHtml(channel);
-      const selectedClass = channel === currentChannel ? 'channel-pill--active' : '';
-      const deleteButton = channel !== 'general'
-        ? `<form class="channel-pill__delete" method="POST" action="/channels/delete">
-             <input type="hidden" name="channelName" value="${escapeHtml(channel)}" />
-             <input type="hidden" name="currentChannel" value="${escapeHtml(currentChannel)}" />
-             <button type="submit" aria-label="Delete channel ${safeChannel}">×</button>
-           </form>`
-        : '';
-
-      return `<div class="channel-pill ${selectedClass}"><a href="/chat?channel=${encodeURIComponent(channel)}">${safeChannel}</a>${deleteButton}</div>`;
-    })
-    .join('');
-
-  return `
-    <div class="channel-bar">
-      <div class="channel-list">${channelItems}</div>
-      <form class="channel-form" method="POST" action="/channels/create">
-        <label for="channelName">Create channel</label>
-        <input id="channelName" name="channelName" type="text" placeholder="new-channel" autocomplete="off" />
-        <button type="submit">Create</button>
-      </form>
-    </div>
-  `;
-}
-
-app.post('/channels/create', (req, res) => {
-  const requestedName = normalizeChannelName(req.body.channelName || '');
-  const channelName = requestedName || 'general';
-
-  if (!channels.includes(channelName)) {
-    channels.push(channelName);
-    saveChannels(channels);
-  }
-
-  res.redirect(`/chat?channel=${encodeURIComponent(channelName)}`);
-});
-
-app.post('/channels/delete', (req, res) => {
-  const requestedName = (req.body.channelName || '').trim();
-  const currentChannel = (req.body.currentChannel || 'general').trim();
-  const channelName = requestedName;
-
-  if (channelName && channelName !== 'general' && channels.includes(channelName)) {
-    const remainingChannels = channels.filter((name) => name !== channelName);
-    channels = remainingChannels.length > 0 ? remainingChannels : ['general'];
-    saveChannels(channels);
-
-    const allSubmissions = loadCsvSubmissions();
-    const filteredSubmissions = allSubmissions.filter((item) => item.channel !== channelName);
-    saveCsvSubmissions(filteredSubmissions);
-  }
-
-  const redirectChannel = channels.includes(currentChannel) ? currentChannel : 'general';
-  res.redirect(`/chat?channel=${encodeURIComponent(redirectChannel)}`);
-});
-
 app.post('/upload', upload.single('media'), (req, res) => {
   const textContent = (req.body.text || '').trim();
   const senderUsername = (req.body.senderUsername || '').trim();
-  const requestedChannel = (req.body.channel || '').trim();
-  const currentChannel = channels.includes(requestedChannel) ? requestedChannel : 'general';
   const usernameFromCookie = getUsernameFromRequest(req);
   const usernameForRender = senderUsername || usernameFromCookie;
   const storedSenderUsername = senderUsername || usernameForRender;
@@ -193,12 +97,11 @@ app.post('/upload', upload.single('media'), (req, res) => {
   const hasMedia = Boolean(file);
 
   if (!hasText && !hasMedia) {
-    const contentTemplate = loadTemplate('chat.html');
+    const contentTemplate = loadTemplate('chat/index.html');
     const content = contentTemplate
-      .replace('{{chatItems}}', buildChatItems(usernameForRender, currentChannel))
+      .replace('{{chatItems}}', buildChatItems(usernameForRender))
       .replace('{{formNotice}}', '<div class="notice">Please add text or attach a photo/video.</div>')
-      .replace('{{channelControls}}', renderChannelControls(currentChannel))
-      .replace('{{currentChannel}}', escapeHtml(currentChannel));
+      .replace('{{usernameInput}}', '');
     return res.status(400).send(renderPage('Chat interface', content, usernameForRender));
   }
 
@@ -223,7 +126,6 @@ app.post('/upload', upload.single('media'), (req, res) => {
     textContent,
     mediaPath,
     mediaType,
-    channel: currentChannel,
     receivedDate,
     receivedTime
   };
@@ -234,16 +136,20 @@ app.post('/upload', upload.single('media'), (req, res) => {
     appendToCsv(submission);
   } catch (error) {
     console.error('Failed to write history.csv:', error);
-    return res.status(500).send(
-      renderPageFromTemplate(
-        'Server error',
-        'server-error.html',
-        getUsernameFromRequest(req)
-      )
-    );
+    const errorContent = `
+      <div class="card">
+        <div class="brand">
+          <span class="brand__mark">⚠️</span>
+          <div>
+            <h1>Server error</h1>
+            <p class="meta">Unable to save your submission right now.</p>
+          </div>
+        </div>
+      </div>`;
+    return res.status(500).send(renderPage('Server error', errorContent, getUsernameFromRequest(req)));
   }
 
-  res.redirect(`/chat?channel=${encodeURIComponent(currentChannel)}`);
+  res.redirect('/chat');
 });
 
 app.post('/delete-message', (req, res) => {
@@ -287,10 +193,8 @@ function renderMediaAttachment(item) {
   return `<div class="chat-message__media-container"><a class="chat-message__media-link" href="${src}" target="_blank" rel="noopener noreferrer">Open attachment</a>${downloadButton}</div>`;
 }
 
-function buildChatItems(currentUsername = '', currentChannel = 'general') {
-  const allSubmissions = loadCsvSubmissions().filter((item) => {
-    return String(item.channel || 'general') === currentChannel;
-  });
+function buildChatItems(currentUsername = '') {
+  const allSubmissions = loadCsvSubmissions();
   const recentSubmissions = allSubmissions.slice(-8);
   const normalizedCurrent = currentUsername.trim();
   return recentSubmissions.length
@@ -314,33 +218,32 @@ function buildChatItems(currentUsername = '', currentChannel = 'general') {
             <div class="chat-message ${bubbleClass}">
               ${bodyHtml}
               ${mediaHtml}
-              <div class="chat-message__meta">${sender} · ${escapeHtml(item.receivedDate)} ${escapeHtml(item.receivedTime)}</div>
+              <div class="chat-message__meta">${escapeHtml(item.receivedDate)} ${escapeHtml(item.receivedTime)}</div>
               ${deleteButton}
             </div>`;
         })
         .join('')
-    : loadTemplate('chat-empty.html');
+    : loadTemplate('chat/empty.html');
 }
+
+app.get('/home', (req, res) => {
+  const content = loadTemplate('home/index.html');
+  res.send(renderPage('Home', content));
+});
 
 app.get('/chat', (req, res) => {
   const currentUsername = getUsernameFromRequest(req);
-  const requestedChannel = (req.query.channel || '').trim();
-  const currentChannel = channels.includes(requestedChannel) ? requestedChannel : 'general';
-  const usernameInput = currentUsername
-    ? ''
-    : `<div class="form-row">
-         <label for="senderUsername">Username</label>
-         <input id="senderUsername" name="senderUsername" type="text" placeholder="Your username (optional)" autocomplete="username" />
-       </div>`;
-
-  const contentTemplate = loadTemplate('chat.html');
+  const contentTemplate = loadTemplate('chat/index.html');
   const content = contentTemplate
-    .replace('{{chatItems}}', buildChatItems(currentUsername, currentChannel))
+    .replace('{{chatItems}}', buildChatItems(currentUsername))
     .replace('{{formNotice}}', '')
-    .replace('{{usernameInput}}', usernameInput)
-    .replace('{{channelControls}}', renderChannelControls(currentChannel))
-    .replace('{{currentChannel}}', escapeHtml(currentChannel));
+    .replace('{{usernameInput}}', '');
   res.send(renderPage('Chat interface', content, currentUsername));
+});
+
+app.get('/settings', (req, res) => {
+  const content = loadTemplate('settings/index.html');
+  res.send(renderPage('Settings', content));
 });
 
 app.get('/submissions', (req, res) => {
@@ -350,12 +253,40 @@ app.get('/submissions', (req, res) => {
       const mediaCell = item.mediaPath
         ? `<a href="${escapeHtml(item.mediaPath)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.mediaType || 'file')}</a>`
         : '';
-      return `<tr><td>${index + 1}</td><td>${escapeHtml(item.senderUsername)}</td><td><pre>${escapeHtml(item.textContent)}</pre></td><td>${mediaCell}</td><td>${escapeHtml(item.channel || 'general')}</td><td>${escapeHtml(item.receivedDate)}</td><td>${escapeHtml(item.receivedTime)}</td></tr>`;
+      return `<tr><td>${index + 1}</td><td><pre>${escapeHtml(item.textContent)}</pre></td><td>${mediaCell}</td><td>${escapeHtml(item.receivedDate)}</td><td>${escapeHtml(item.receivedTime)}</td></tr>`;
     })
     .join('');
 
-  const contentTemplate = loadTemplate('submissions.html');
-  const content = contentTemplate.replace('{{rows}}', rows || loadTemplate('no-submissions.html'));
+  const rowsHtml = rows || '<tr><td colspan="5">No submissions found.</td></tr>';
+  const content = `
+    <div class="card">
+      <div class="brand">
+        <span class="brand__mark">📥</span>
+        <div>
+          <h1>Received submissions</h1>
+          <p class="meta">Browse all saved text submissions from the form.</p>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Text</th>
+              <th>Media</th>
+              <th>Date</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+      <div class="footer-links">
+        <a class="button-link" href="/">Back to upload page</a>
+      </div>
+    </div>`;
   res.send(renderPage('Received submissions', content, getUsernameFromRequest(req)));
 });
 
@@ -382,21 +313,13 @@ app.use((err, req, res, next) => {
   }
 
   const currentUsername = getUsernameFromRequest(req);
-  const usernameInput = currentUsername
-    ? ''
-    : `<div class="form-row">
-         <label for="senderUsername">Username</label>
-         <input id="senderUsername" name="senderUsername" type="text" placeholder="Your username (optional)" autocomplete="username" />
-       </div>`;
+  const usernameInput = '';
 
-  const currentChannel = 'general';
-  const contentTemplate = loadTemplate('chat.html');
+  const contentTemplate = loadTemplate('chat/index.html');
   const content = contentTemplate
-    .replace('{{chatItems}}', buildChatItems(currentUsername, currentChannel))
+    .replace('{{chatItems}}', buildChatItems(currentUsername))
     .replace('{{formNotice}}', `<div class="notice">${escapeHtml(err.message)}</div>`)
-    .replace('{{usernameInput}}', usernameInput)
-    .replace('{{channelControls}}', renderChannelControls(currentChannel))
-    .replace('{{currentChannel}}', escapeHtml(currentChannel));
+    .replace('{{usernameInput}}', usernameInput);
 
   res.status(400).send(renderPage('Upload error', content, currentUsername));
 });
@@ -404,19 +327,9 @@ app.use((err, req, res, next) => {
 function renderIndexPage(username) {
   const indexFilePath = path.join(__dirname, 'public', 'index.html');
   let html = fs.readFileSync(indexFilePath, 'utf8');
-  const bannerHtml = username
-    ? `<div id="username-banner" class="username-banner" aria-live="polite">Signed in as ${escapeHtml(username)}</div>`
-    : '<div id="username-banner" class="username-banner" aria-live="polite"></div>';
+  const bannerHtml = '<div id="username-banner" class="username-banner" aria-live="polite"></div>';
 
-  const usernameSection = username
-    ? ''
-    : `<div class="form-group">
-          <label for="senderUsername">Your username (optional)</label>
-          <input id="senderUsername" name="senderUsername" type="text" placeholder="Enter your username" autocomplete="username" />
-        </div>
-        <div class="skip-container">
-          <a class="button-link" href="/skip">Skip and continue as anonymous</a>
-        </div>`;
+  const usernameSection = '';
 
   html = html.replace(
     '<div id="username-banner" class="username-banner" aria-live="polite"></div>',
@@ -433,7 +346,7 @@ app.listen(port, host, () => {
 
 function ensureCsvFile() {
   if (!fs.existsSync(historyCsvPath)) {
-    fs.writeFileSync(historyCsvPath, 'senderUsername,textContent,mediaPath,mediaType,channel,receivedDate,receivedTime\n', 'utf8');
+    fs.writeFileSync(historyCsvPath, 'senderUsername,textContent,mediaPath,mediaType,receivedDate,receivedTime\n', 'utf8');
   } else {
     migrateCsvToCurrentFormat();
   }
@@ -447,12 +360,14 @@ function migrateCsvToCurrentFormat() {
   }
 
   const header = parseCsvLine(rows[0]);
-  const currentHeader = ['senderUsername', 'textContent', 'mediaPath', 'mediaType', 'channel', 'receivedDate', 'receivedTime'];
-  const previousHeader = ['senderUsername', 'textContent', 'mediaPath', 'mediaType', 'receivedDate', 'receivedTime'];
+  const currentHeader = ['senderUsername', 'textContent', 'mediaPath', 'mediaType', 'receivedDate', 'receivedTime'];
+  const previousHeader = ['senderUsername', 'textContent', 'mediaPath', 'mediaType', 'channel', 'receivedDate', 'receivedTime'];
+  const oldPreviousHeader = ['senderUsername', 'textContent', 'mediaPath', 'mediaType', 'receivedDate', 'receivedTime'];
   const oldHeader = ['textContent', 'receivedTime', 'receivedDate', 'senderUsername'];
   const legacyHeader = ['text', 'createdAt'];
   const isCurrentFormat = arraysEqual(header, currentHeader);
   const isPreviousFormat = arraysEqual(header, previousHeader);
+  const isOldPreviousFormat = arraysEqual(header, oldPreviousHeader);
   const isOldFormat = arraysEqual(header, oldHeader);
   const isLegacyFormat = arraysEqual(header, legacyHeader);
 
@@ -468,14 +383,19 @@ function migrateCsvToCurrentFormat() {
         return null;
       }
 
-      if (isOldFormat) {
-        const [textContent, receivedTime, receivedDate, senderUsername] = values;
-        return `${escapeCsv(senderUsername)},${escapeCsv(textContent)},${escapeCsv('')},${escapeCsv('')},${escapeCsv('general')},${escapeCsv(receivedDate)},${escapeCsv(receivedTime)}`;
+      if (isPreviousFormat) {
+        const [senderUsername, textContent, mediaPath, mediaType, channel, receivedDate, receivedTime] = values;
+        return `${escapeCsv(senderUsername)},${escapeCsv(textContent)},${escapeCsv(mediaPath)},${escapeCsv(mediaType)},${escapeCsv(receivedDate)},${escapeCsv(receivedTime)}`;
       }
 
-      if (isPreviousFormat) {
+      if (isOldPreviousFormat) {
         const [senderUsername, textContent, mediaPath, mediaType, receivedDate, receivedTime] = values;
-        return `${escapeCsv(senderUsername)},${escapeCsv(textContent)},${escapeCsv(mediaPath)},${escapeCsv(mediaType)},${escapeCsv('general')},${escapeCsv(receivedDate)},${escapeCsv(receivedTime)}`;
+        return `${escapeCsv(senderUsername)},${escapeCsv(textContent)},${escapeCsv(mediaPath)},${escapeCsv(mediaType)},${escapeCsv(receivedDate)},${escapeCsv(receivedTime)}`;
+      }
+
+      if (isOldFormat) {
+        const [textContent, receivedTime, receivedDate, senderUsername] = values;
+        return `${escapeCsv(senderUsername)},${escapeCsv(textContent)},${escapeCsv('')},${escapeCsv('')},${escapeCsv(receivedDate)},${escapeCsv(receivedTime)}`;
       }
 
       if (isLegacyFormat) {
@@ -483,7 +403,7 @@ function migrateCsvToCurrentFormat() {
         const date = createdAt ? new Date(createdAt) : null;
         const receivedDate = date ? date.toISOString().slice(0, 10) : '';
         const receivedTime = date ? date.toISOString().slice(11, 19) : '';
-        return `${escapeCsv('')},${escapeCsv(text)},${escapeCsv('')},${escapeCsv('')},${escapeCsv('general')},${escapeCsv(receivedDate)},${escapeCsv(receivedTime)}`;
+        return `${escapeCsv('')},${escapeCsv(text)},${escapeCsv('')},${escapeCsv('')},${escapeCsv(receivedDate)},${escapeCsv(receivedTime)}`;
       }
 
       return null;
@@ -503,12 +423,14 @@ function loadCsvSubmissions() {
   }
 
   const header = parseCsvLine(rows[0]);
-  const currentHeader = ['senderUsername', 'textContent', 'mediaPath', 'mediaType', 'channel', 'receivedDate', 'receivedTime'];
-  const previousHeader = ['senderUsername', 'textContent', 'mediaPath', 'mediaType', 'receivedDate', 'receivedTime'];
+  const currentHeader = ['senderUsername', 'textContent', 'mediaPath', 'mediaType', 'receivedDate', 'receivedTime'];
+  const previousHeader = ['senderUsername', 'textContent', 'mediaPath', 'mediaType', 'channel', 'receivedDate', 'receivedTime'];
+  const oldPreviousHeader = ['senderUsername', 'textContent', 'mediaPath', 'mediaType', 'receivedDate', 'receivedTime'];
   const oldHeader = ['textContent', 'receivedTime', 'receivedDate', 'senderUsername'];
   const legacyHeader = ['text', 'createdAt'];
   const isCurrentFormat = arraysEqual(header, currentHeader);
   const isPreviousFormat = arraysEqual(header, previousHeader);
+  const isOldPreviousFormat = arraysEqual(header, oldPreviousHeader);
   const isOldFormat = arraysEqual(header, oldHeader);
   const isLegacyFormat = arraysEqual(header, legacyHeader);
 
@@ -521,18 +443,23 @@ function loadCsvSubmissions() {
       }
 
       if (isCurrentFormat) {
-        const [senderUsername, textContent, mediaPath, mediaType, channel, receivedDate, receivedTime] = values;
-        return { senderUsername, textContent, mediaPath, mediaType, channel, receivedDate, receivedTime };
+        const [senderUsername, textContent, mediaPath, mediaType, receivedDate, receivedTime] = values;
+        return { senderUsername, textContent, mediaPath, mediaType, receivedDate, receivedTime };
       }
 
       if (isPreviousFormat) {
+        const [senderUsername, textContent, mediaPath, mediaType, channel, receivedDate, receivedTime] = values;
+        return { senderUsername, textContent, mediaPath, mediaType, receivedDate, receivedTime };
+      }
+
+      if (isOldPreviousFormat) {
         const [senderUsername, textContent, mediaPath, mediaType, receivedDate, receivedTime] = values;
-        return { senderUsername, textContent, mediaPath, mediaType, channel: 'general', receivedDate, receivedTime };
+        return { senderUsername, textContent, mediaPath, mediaType, receivedDate, receivedTime };
       }
 
       if (isOldFormat) {
         const [textContent, receivedTime, receivedDate, senderUsername] = values;
-        return { senderUsername, textContent, mediaPath: '', mediaType: '', channel: 'general', receivedDate, receivedTime };
+        return { senderUsername, textContent, mediaPath: '', mediaType: '', receivedDate, receivedTime };
       }
 
       if (isLegacyFormat) {
@@ -543,14 +470,13 @@ function loadCsvSubmissions() {
           textContent: text,
           mediaPath: '',
           mediaType: '',
-          channel: 'general',
           receivedDate: receivedDate || '',
           receivedTime: receivedTime ? receivedTime.replace(/Z$/, '') : ''
         };
       }
 
-      const [senderUsername, textContent, mediaPath, mediaType, channel, receivedDate, receivedTime] = values.concat(['', '', '', '', '', '', '']).slice(0, 7);
-      return { senderUsername, textContent, mediaPath, mediaType, channel, receivedDate, receivedTime };
+      const [senderUsername, textContent, mediaPath, mediaType, receivedDate, receivedTime] = values.concat(['', '', '', '', '', '']).slice(0, 6);
+      return { senderUsername, textContent, mediaPath, mediaType, receivedDate, receivedTime };
     })
     .filter(Boolean);
 }
@@ -620,15 +546,15 @@ function parseCsvLine(line) {
 }
 
 function appendToCsv(submission) {
-  const line = `${escapeCsv(submission.senderUsername)},${escapeCsv(submission.textContent)},${escapeCsv(submission.mediaPath || '')},${escapeCsv(submission.mediaType || '')},${escapeCsv(submission.channel || 'general')},${escapeCsv(submission.receivedDate)},${escapeCsv(submission.receivedTime)}\n`;
+  const line = `${escapeCsv(submission.senderUsername)},${escapeCsv(submission.textContent)},${escapeCsv(submission.mediaPath || '')},${escapeCsv(submission.mediaType || '')},${escapeCsv(submission.receivedDate)},${escapeCsv(submission.receivedTime)}\n`;
   fs.appendFileSync(historyCsvPath, line, 'utf8');
 }
 
 function saveCsvSubmissions(items) {
-  const header = 'senderUsername,textContent,mediaPath,mediaType,channel,receivedDate,receivedTime\n';
+  const header = 'senderUsername,textContent,mediaPath,mediaType,receivedDate,receivedTime\n';
   const body = items
-    .map(({ senderUsername, textContent, mediaPath, mediaType, channel, receivedDate, receivedTime }) =>
-      `${escapeCsv(senderUsername)},${escapeCsv(textContent)},${escapeCsv(mediaPath || '')},${escapeCsv(mediaType || '')},${escapeCsv(channel || 'general')},${escapeCsv(receivedDate)},${escapeCsv(receivedTime)}`
+    .map(({ senderUsername, textContent, mediaPath, mediaType, receivedDate, receivedTime }) =>
+      `${escapeCsv(senderUsername)},${escapeCsv(textContent)},${escapeCsv(mediaPath || '')},${escapeCsv(mediaType || '')},${escapeCsv(receivedDate)},${escapeCsv(receivedTime)}`
     )
     .join('\n');
   fs.writeFileSync(historyCsvPath, header + (body ? body + '\n' : ''), 'utf8');
@@ -670,9 +596,7 @@ function loadTemplate(filename) {
 
 function renderPage(title, content, username = '') {
   const layout = loadTemplate('layout.html');
-  const usernameDisplay = username
-    ? `<a class="username-banner" href="/signout" title="Click to sign out">Signed in as ${escapeHtml(username)}</a>`
-    : '';
+  const usernameDisplay = '';
 
   return layout
     .replace('{{title}}', escapeHtml(title))

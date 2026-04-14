@@ -6,15 +6,12 @@
       <p class="meta">A chat-style view for submitting text and seeing recent entries as messages.</p>
     </div>
   </div>
-  {{channelControls}}
 
   <div class="chat-window">{{chatItems}}</div>
   {{formNotice}}
 
   <form class="chat-form" method="POST" action="/upload" enctype="multipart/form-data">
     <input type="hidden" name="source" value="chat" />
-    <input type="hidden" name="channel" value="{{currentChannel}}" />
-    {{usernameInput}}
     <div class="form-row">
       <label for="text">Message</label>
       <textarea id="text" name="text" placeholder="Type your message here..."></textarea>
