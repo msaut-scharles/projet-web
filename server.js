@@ -212,7 +212,7 @@ app.post('/upload', upload.single('media'), (req, res) => {
   let mediaType = '';
 
   if (hasMedia) {
-    mediaPath = `/uploads/${encodeURIComponent(path.basename(file.filename))}`;
+    mediaPath = `./uploads/${encodeURIComponent(path.basename(file.filename))}`;
     mediaType = file.mimetype.startsWith('image/') ? 'image' : file.mimetype.startsWith('video/') ? 'video' : '';
   }
 
@@ -273,7 +273,7 @@ function renderMediaAttachment(item) {
     return '';
   }
 
-  const src = escapeHtml(item.mediaPath);
+  const src = escapeHtml(item.mediaPath.replace(/^\.\//, '/'));
   const filename = escapeHtml(path.basename(item.mediaPath));
   const downloadButton = `<a class="chat-message__download" href="${src}" download="${filename}" title="Download attachment" aria-label="Download attachment">⬇</a>`;
 
@@ -346,7 +346,7 @@ app.get('/submissions', (req, res) => {
   const rows = csvSubmissions
     .map((item, index) => {
       const mediaCell = item.mediaPath
-        ? `<a href="${escapeHtml(item.mediaPath)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.mediaType || 'file')}</a>`
+        ? `<a href="${escapeHtml(item.mediaPath.replace(/^\.\//, '/'))}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.mediaType || 'file')}</a>`
         : '';
       return `<tr><td>${index + 1}</td><td><pre>${escapeHtml(item.textContent)}</pre></td><td>${mediaCell}</td><td>${escapeHtml(item.receivedDate)}</td><td>${escapeHtml(item.receivedTime)}</td></tr>`;
     })
