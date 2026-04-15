@@ -1,0 +1,129 @@
+/* Header and Navigation Styles */
+header {
+  background-color: var(--mocha-crust);
+  color: var(--mocha-text);
+  padding: var(--spacing-md) var(--spacing-xl);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--spacing-xl);
+}
+
+/* Navigation */
+nav {
+  flex: 1;
+}
+
+nav ul {
+  display: flex;
+  gap: var(--spacing-lg);
+  align-items: center;
+}
+
+nav a {
+  color: var(--mocha-text);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  transition: all var(--transition-base);
+  position: relative;
+}
+
+nav a:hover {
+  color: var(--mocha-text);
+  background-color: rgba(137, 180, 250, 0.15);
+}
+
+nav a::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background-color: var(--mocha-blue);
+  transition: width var(--transition-base);
+}
+
+nav a:hover::after {
+  width: 100%;
+}
+
+/* Username Input Container */
+header > div {
+  display: flex;
+  align-items: center;
+  min-width: 200px;
+}
+
+header input[type="text"] {
+  background-color: rgba(205, 214, 244, 0.1);
+  border: 1px solid rgba(205, 214, 244, 0.2);
+  color: var(--mocha-text);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  width: 100%;
+  transition: all var(--transition-fast);
+  font-size: var(--font-size-base);
+}
+
+header input[type="text"]::placeholder {
+  color: rgba(205, 214, 244, 0.5);
+}
+
+header input[type="text"]:focus {
+  outline: none;
+  background-color: rgba(205, 214, 244, 0.15);
+  border-color: rgba(137, 180, 250, 0.5);
+  box-shadow: 0 0 0 3px rgba(137, 180, 250, 0.2);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  header {
+    flex-direction: column;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+  }
+
+  nav {
+    width: 100%;
+  }
+
+  nav ul {
+    gap: var(--spacing-md);
+    justify-content: center;
+  }
+
+  nav a {
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-sm);
+  }
+
+  header > div {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  nav ul {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  nav a {
+    display: block;
+    text-align: center;
+    width: 100%;
+  }
+
+  nav a::after {
+    bottom: -2px;
+  }
+}
